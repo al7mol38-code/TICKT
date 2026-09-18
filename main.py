@@ -5,7 +5,7 @@ import os
 
 # الأديانات / الرتب التي أرسلتها
 OWNER_ROLE_ID = 1533463569683845160
-CO_OWN_ROLE_ID = 1533463570564649121
+CO_OWNER_ROLE_ID = 1533463570564649121
 
 ROLE_COMPLAINT = [1533463592265977886, 1541351616907583560]
 ROLE_STAFF_APP = [1533463608145477712]
@@ -47,8 +47,13 @@ class MainTicketView(discord.ui.View):
             if role:
                 overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
 
+        # جلب الكاتيجوري الذي تنتمي له رسالة الإعدادات لتنفتح التيكت تحته مباشرة
+        setup_channel = guild.get_channel(SETUP_CHANNEL_ID)
+        category = setup_channel.category if setup_channel else None
+
         ticket_channel = await guild.create_text_channel(
             name=channel_name,
+            category=category,
             overwrites=overwrites,
             topic=f"نوع التيكت: {ticket_type} | صاحبها: {member.id}"
         )
@@ -97,7 +102,7 @@ class MainTicketView(discord.ui.View):
         await self.create_ticket(interaction, "بوست لورد", [])
 
 
-# أزرار التحكم داخل التيكت
+# أزرار التحكم داخل التيكت (استلام، استدعاء، إغلاق، حذف)
 class TicketControlView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -109,7 +114,51 @@ class TicketControlView(discord.ui.View):
 
     @discord.ui.button(label="🔔 استدعاء العضو", style=discord.ButtonStyle.gray, custom_id="call_member_btn")
     async def call_member(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(f"🔔 تنبيه لصاحب التيكت، يرجى الرد هنا في حال تواجدك!", ephemeral=False)
+        guild = interaction.guild
+        topic = interaction.channel.topic or ""
+        member_id = None
+        
+        # استخراج صاحب التيكت من الـ topic
+        for part in topic.split("|"):
+            if "صاحبها:" in part:
+                try:
+                    member_id = int(part.replace("صاحبها:", "").strip())
+                except:
+                    pass
+
+        if not member_id:
+            await interaction.response.send_message("❌ لم يتم العثور على صاحب التيكت في وصف الروم.", ephemeral=True)
+            return
+
+        member = guild.get_member(member_id)
+        if not member:
+            try:
+                member = await guild.fetch_member(member_id)
+            except:
+                member = None
+
+        if not member:
+            await interaction.response.send_message("❌ عذراً، لم أتمكن من العثور على العضو في السيرفر.", ephemeral=True)
+            return
+
+        # محاولة إرسال رسالة خاصة للعضو
+        dm_sent = True
+        try:
+            dm_embed = discord.Embed(
+                title="🔔 تنبيه استدعاء تيكت",
+                description=f"مرحباً {member.mention}، يرجى التوجه إلى تيكتك في سيرفر **{guild.name}** لأن الفريق بانتظارك:\n🔗 {interaction.channel.mention}",
+                color=discord.Color.gold()
+            )
+            await member.send(embed=dm_embed)
+        except discord.Forbidden:
+            dm_sent = False # إذا كان العضو قافل الخاص
+
+        # الرد في روم التيكت
+        msg = f"🔔 تم إرسال تنبيه استدعاء لصاحب التيكت {member.mention}!"
+        if not dm_sent:
+            msg += "\n⚠️ *(ملاحظة: خاصة مغلقة، تم التنبيه هنا فقط).*કના"
+
+        await interaction.response.send_message(msg, ephemeral=False)
 
     @discord.ui.button(label="🔒 إغلاق التيكت", style=discord.ButtonStyle.red, custom_id="close_ticket_btn")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -147,6 +196,30 @@ class TicketControlView(discord.ui.View):
             )
             await log_channel.send(embed=log_embed)
 
+    @discord.ui.button(label="🗑️ حذف التيكت", style=discord.ButtonStyle.danger, custom_id="delete_ticket_btn")
+    async def delete_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        user_roles = [r.id for r in interaction.user.roles]
+        
+        is_admin = (OWNER_ROLE_ID in user_roles or CO_OWN_ROLE_ID in user_roles or interaction.user.guild_permissions.administrator)
+
+        if not is_admin:
+            await interaction.response.send_message("❌ عذراً، زر الحذف مخصص للإدارة العليا فقط.", ephemeral=True)
+            return
+
+        await interaction.response.send_message("🗑️ جاري حذف التيكت نهائياً...", ephemeral=True)
+        
+        log_channel = guild.get_channel(LOG_CHANNEL_ID)
+        if log_channel:
+            log_embed = discord.Embed(
+                title="🗑️ حذف تيكت نهائياً",
+                description=f"**الروم:** {interaction.channel.name}\n**بواسطة الإداري:** {interaction.user.mention}",
+                color=discord.Color.dark_red()
+            )
+            await log_channel.send(embed=log_embed)
+
+        await interaction.channel.delete()
+
 # إعداد البوت والتشغيل
 intents = discord.Intents.default()
 intents.message_content = True
@@ -158,7 +231,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name} (ID: {bot.user.id})")
-    # تسجيل الأزرار لتبقى تعمل باستمرار حتى بعد إعادة التشغيل
     bot.add_view(MainTicketView())
     bot.add_view(TicketControlView())
     print("✅ تم تفعيل أزرار التيكتات بنجاح!")
