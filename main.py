@@ -7,6 +7,9 @@ import os
 OWNER_ROLE_ID = 1533463569683845160
 CO_OWNER_ROLE_ID = 1533463570564649121
 
+# أيدي بوت النقاط الذي سيتم إدخاله تلقائياً للتيكتات
+POINTS_BOT_ID = 1536762014729502912
+
 ROLE_COMPLAINT = [1533463592265977886, 1541351616907583560]
 ROLE_STAFF_APP = [1533463608145477712]
 ROLE_INQUIRY = [1533463604479791244]
@@ -36,6 +39,11 @@ class MainTicketView(discord.ui.View):
             member: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
             guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
         }
+
+        # إضافة بوت النقاط تلقائياً للصلاحيات لكي يستطيع رؤية وقراءة رسائل التيكت
+        points_bot_member = guild.get_member(POINTS_BOT_ID)
+        if points_bot_member:
+            overwrites[points_bot_member] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
 
         for r_id in [OWNER_ROLE_ID, CO_OWNER_ROLE_ID]:
             role = guild.get_role(r_id)
@@ -153,7 +161,7 @@ class TicketControlView(discord.ui.View):
 
         msg = f"🔔 تم إرسال تنبيه استدعاء لصاحب التيكت {member.mention}!"
         if not dm_sent:
-            msg += "\n⚠️ *(ملاحظة: خاصته مغلقة، تم التنبيه هنا فقط).*કના"
+            msg += "\n⚠️ *(ملاحظة: خاصته مغلقة، تم التنبيه هنا فقط).* "
 
         await interaction.response.send_message(msg, ephemeral=False)
 
@@ -260,4 +268,4 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
     bot.run(TOKEN)
 else:
-    print("❌ خطأ: يجيب وضع توكن البوت في متغيرات البيئة DISCORD_TOKEN.")
+    print("❌ خطأ: يجب وضع توكن البوت في متغيرات البيئة DISCORD_TOKEN.")
