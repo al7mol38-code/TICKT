@@ -37,7 +37,7 @@ class MainTicketView(discord.ui.View):
             guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
         }
 
-        for r_id in [OWNER_ROLE_ID, CO_OWN_ROLE_ID]:
+        for r_id in [OWNER_ROLE_ID, CO_OWNER_ROLE_ID]:
             role = guild.get_role(r_id)
             if role:
                 overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
@@ -118,7 +118,6 @@ class TicketControlView(discord.ui.View):
         topic = interaction.channel.topic or ""
         member_id = None
         
-        # استخراج صاحب التيكت من الـ topic
         for part in topic.split("|"):
             if "صاحبها:" in part:
                 try:
@@ -141,7 +140,6 @@ class TicketControlView(discord.ui.View):
             await interaction.response.send_message("❌ عذراً، لم أتمكن من العثور على العضو في السيرفر.", ephemeral=True)
             return
 
-        # محاولة إرسال رسالة خاصة للعضو
         dm_sent = True
         try:
             dm_embed = discord.Embed(
@@ -151,12 +149,11 @@ class TicketControlView(discord.ui.View):
             )
             await member.send(embed=dm_embed)
         except discord.Forbidden:
-            dm_sent = False # إذا كان العضو قافل الخاص
+            dm_sent = False
 
-        # الرد في روم التيكت
         msg = f"🔔 تم إرسال تنبيه استدعاء لصاحب التيكت {member.mention}!"
         if not dm_sent:
-            msg += "\n⚠️ *(ملاحظة: خاصة مغلقة، تم التنبيه هنا فقط).*કના"
+            msg += "\n⚠️ *(ملاحظة: خاصته مغلقة، تم التنبيه هنا فقط).*કના"
 
         await interaction.response.send_message(msg, ephemeral=False)
 
@@ -165,7 +162,7 @@ class TicketControlView(discord.ui.View):
         guild = interaction.guild
         user_roles = [r.id for r in interaction.user.roles]
         
-        is_admin = (OWNER_ROLE_ID in user_roles or CO_OWN_ROLE_ID in user_roles or interaction.user.guild_permissions.administrator)
+        is_admin = (OWNER_ROLE_ID in user_roles or CO_OWNER_ROLE_ID in user_roles or interaction.user.guild_permissions.administrator)
 
         if not is_admin:
             await interaction.response.send_message("❌ عذراً، زر الإغلاق مخصص للإدارة العليا فقط لإعطاء النقاط وتقييم الأداء قبل الحذف.", ephemeral=True)
@@ -201,7 +198,7 @@ class TicketControlView(discord.ui.View):
         guild = interaction.guild
         user_roles = [r.id for r in interaction.user.roles]
         
-        is_admin = (OWNER_ROLE_ID in user_roles or CO_OWN_ROLE_ID in user_roles or interaction.user.guild_permissions.administrator)
+        is_admin = (OWNER_ROLE_ID in user_roles or CO_OWNER_ROLE_ID in user_roles or interaction.user.guild_permissions.administrator)
 
         if not is_admin:
             await interaction.response.send_message("❌ عذراً، زر الحذف مخصص للإدارة العليا فقط.", ephemeral=True)
@@ -237,7 +234,7 @@ async def on_ready():
 
 @bot.command(name="setup_tickets", aliases=["تيكتات"])
 async def setup_tickets(ctx):
-    if not (OWNER_ROLE_ID in [r.id for r in ctx.author.roles] or CO_OWN_ROLE_ID in [r.id for r in ctx.author.roles]):
+    if not (OWNER_ROLE_ID in [r.id for r in ctx.author.roles] or CO_OWNER_ROLE_ID in [r.id for r in ctx.author.roles]):
         await ctx.reply("عذراً، هذا الأمر مخصص للأونر والكو أونر فقط.", delete_after=5)
         return
 
