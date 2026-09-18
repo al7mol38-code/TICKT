@@ -3,9 +3,9 @@ from discord.ext import commands
 import sqlite3
 import os
 
-# الأديانات التي أرسلتها
+# الأديانات / الرتب التي أرسلتها
 OWNER_ROLE_ID = 1533463569683845160
-CO_OWNER_ROLE_ID = 1533463570564649121
+CO_OWN_ROLE_ID = 1533463570564649121
 
 ROLE_COMPLAINT = [1533463592265977886, 1541351616907583560]
 ROLE_STAFF_APP = [1533463608145477712]
@@ -25,27 +25,23 @@ class MainTicketView(discord.ui.View):
         guild = interaction.guild
         member = interaction.user
 
-        # منع فتح أكثر من تيكت لنفس النوع أو تيكت عامة مفعلة
         channel_name = f"ticket-{ticket_type}-{member.name}".lower().replace(" ", "-")
         existing_channel = discord.utils.get(guild.text_channels, name=channel_name)
         if existing_channel:
             await interaction.response.send_message(f"❌ لديك تيكت مفتوحة مسبقاً من هذا النوع: {existing_channel.mention}", ephemeral=True)
             return
 
-        # الصلاحيات: صاحب التيكت + الأونر + الكو أونر + الرتب المسؤولة فقط
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             member: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
             guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
         }
 
-        # إضافة صلاحية للأونر والكو أونر تلقائياً
-        for r_id in [OWNER_ROLE_ID, CO_OWNER_ROLE_ID]:
+        for r_id in [OWNER_ROLE_ID, CO_OWN_ROLE_ID]:
             role = guild.get_role(r_id)
             if role:
                 overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
 
-        # إضافة صلاحيات الرتب المحددة للقسم
         for r_id in allowed_roles:
             role = guild.get_role(r_id)
             if role:
@@ -57,7 +53,6 @@ class MainTicketView(discord.ui.View):
             topic=f"نوع التيكت: {ticket_type} | صاحبها: {member.id}"
         )
 
-        # إرسال رسالة الترحيب داخل التيكت مع أزرار التحكم بالمشرفين
         embed = discord.Embed(
             title=f"🎫 تيكت جديدة: {ticket_type}",
             description=f"مرحباً بك {member.mention}!\nنوع التيكت: **{ticket_type}**\nيرجى شرح طلبك أو مشكلتك بالتفصيل وسيقوم الفريق المسؤول بخدمتك في أقرب وقت.\n\n> *Farm of Legends* 🎬",
@@ -65,12 +60,9 @@ class MainTicketView(discord.ui.View):
         )
         
         control_view = TicketControlView()
-        msg = await ticket_channel.send(content=f"{member.mention}", embed=embed, view=control_view)
-        
-        # تثبيت رسالة التحكم أو حفظها إن أردت
+        await ticket_channel.send(content=f"{member.mention}", embed=embed, view=control_view)
         await interaction.response.send_message(f"✅ تم فتح التيكت الخاصة بك بنجاح: {ticket_channel.mention}", ephemeral=True)
 
-        # إرسال لوق الفتح
         log_channel = guild.get_channel(LOG_CHANNEL_ID)
         if log_channel:
             log_embed = discord.Embed(
@@ -94,21 +86,18 @@ class MainTicketView(discord.ui.View):
 
     @discord.ui.button(label="VIP", style=discord.ButtonStyle.success, custom_id="ticket_vip")
     async def btn_vip(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # VIP فقط للأونر والكو أونر والمشرف العام
         await self.create_ticket(interaction, "VIP", [])
 
     @discord.ui.button(label="شكوى على إداري", style=discord.ButtonStyle.danger, custom_id="ticket_admin_complaint")
     async def btn_admin_complaint(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # شكوى على إداري موجهة للأونر والكو أونر حصراً
         await self.create_ticket(interaction, "شكوى على إداري", [])
 
     @discord.ui.button(label="بوست لورد", style=discord.ButtonStyle.success, custom_id="ticket_boost_lord")
     async def btn_boost_lord(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # بوست لورد للأونر والكو أونر فقط
         await self.create_ticket(interaction, "بوست لورد", [])
 
 
-# أزرار التحكم داخل التيكت (استلام، استدعاء، إغلاق)
+# أزرار التحكم داخل التيكت
 class TicketControlView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -120,8 +109,6 @@ class TicketControlView(discord.ui.View):
 
     @discord.ui.button(label="🔔 استدعاء العضو", style=discord.ButtonStyle.gray, custom_id="call_member_btn")
     async def call_member(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # استخراج العضو من اسم الروم أو الـ topic
-        topic = interaction.channel.topic or ""
         await interaction.response.send_message(f"🔔 تنبيه لصاحب التيكت، يرجى الرد هنا في حال تواجدك!", ephemeral=False)
 
     @discord.ui.button(label="🔒 إغلاق التيكت", style=discord.ButtonStyle.red, custom_id="close_ticket_btn")
@@ -129,14 +116,12 @@ class TicketControlView(discord.ui.View):
         guild = interaction.guild
         user_roles = [r.id for r in interaction.user.roles]
         
-        is_admin = (OWNER_ROLE_ID in user_roles or CO_OWNER_ROLE_ID in user_roles or interaction.user.guild_permissions.administrator)
+        is_admin = (OWNER_ROLE_ID in user_roles or CO_OWN_ROLE_ID in user_roles or interaction.user.guild_permissions.administrator)
 
         if not is_admin:
             await interaction.response.send_message("❌ عذراً، زر الإغلاق مخصص للإدارة العليا فقط لإعطاء النقاط وتقييم الأداء قبل الحذف.", ephemeral=True)
             return
 
-        # إخفاء الروم عن العضو صاحب التيكت وإبقاؤها ظاهرة للإدارة والأونر
-        # نستخرج صاحب التيكت من الـ topic
         topic = interaction.channel.topic or ""
         member_id = None
         for part in topic.split("|"):
@@ -149,12 +134,10 @@ class TicketControlView(discord.ui.View):
         if member_id:
             member = guild.get_member(member_id)
             if member:
-                # إزالة صلاحية العضو في الروم
                 await interaction.channel.set_permissions(member, view_channel=False)
 
         await interaction.response.send_message(f"🔒 **تم إغلاق التيكت وإخفاؤها عن العضو.**\nالباب مفتوح للأونر والكو أونر والمشرفين لإعطاء النقاط والتقييم، ثم يمكن حذف الروم نهائياً.", ephemeral=False)
 
-        # إرسال لوق الإغلاق
         log_channel = guild.get_channel(LOG_CHANNEL_ID)
         if log_channel:
             log_embed = discord.Embed(
@@ -164,34 +147,48 @@ class TicketControlView(discord.ui.View):
             )
             await log_channel.send(embed=log_embed)
 
-class TicketCog(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
+# إعداد البوت والتشغيل
+intents = discord.Intents.default()
+intents.message_content = True
+intents.guilds = True
+intents.members = True
 
-    @commands.command(name="setup_tickets", aliases=["تيكتات"])
-    async def setup_tickets(self, ctx):
-        if not (OWNER_ROLE_ID in [r.id for r in ctx.author.roles] or CO_OWNER_ROLE_ID in [r.id for r in ctx.author.roles]):
-            await ctx.reply("عذراً، هذا الأمر مخصص للأونر والكو أونر فقط.", delete_after=5)
-            return
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-        embed = discord.Embed(
-            title="🎫 نظام التذاكر الرسمي - Farm of Legends",
-            description="يرجى اختيار القسم المناسب لطلبك بالضغط على الزر أدناه.\n\n"
-                        "• **شكوى**: للإبلاغ عن مشكلة.\n"
-                        "• **تقديم على رتبة المنظمين**: للانضمام لفريق العمل.\n"
-                        "• **استفسار & اقتراح**: لأي استفسارات أو أفكار.\n"
-                        "• **VIP**: مخصص لأعضاء الـ VIP (إدارة فقط).\n"
-                        "• **شكوى على إداري**: مراجعة الإدارة العليا.\n"
-                        "• **بوست لورد**: خاص بداعمين السيرفر.\n\n"
-                        "> *Farm of Legends* 🎬",
-            color=discord.Color.dark_embed()
-        )
-        embed.set_image(url="https://i.imgur.com/ضع_رابط_صورة_الفارم_هنا.jpg") # استبدلها برابط صورتك المباشر إن أردت
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user.name} (ID: {bot.user.id})")
+    # تسجيل الأزرار لتبقى تعمل باستمرار حتى بعد إعادة التشغيل
+    bot.add_view(MainTicketView())
+    bot.add_view(TicketControlView())
+    print("✅ تم تفعيل أزرار التيكتات بنجاح!")
 
-        view = MainTicketView()
-        target_channel = self.bot.get_channel(SETUP_CHANNEL_ID) or ctx.channel
-        await target_channel.send(embed=embed, view=view)
-        await ctx.reply("✅ تم نشر لوحة التيكتات بنجاح!", delete_after=5)
+@bot.command(name="setup_tickets", aliases=["تيكتات"])
+async def setup_tickets(ctx):
+    if not (OWNER_ROLE_ID in [r.id for r in ctx.author.roles] or CO_OWN_ROLE_ID in [r.id for r in ctx.author.roles]):
+        await ctx.reply("عذراً، هذا الأمر مخصص للأونر والكو أونر فقط.", delete_after=5)
+        return
 
-async def setup(bot):
-    await bot.add_cog(TicketCog(bot))
+    embed = discord.Embed(
+        title="🎫 نظام التذاكر الرسمي - Farm of Legends",
+        description="يرجى اختيار القسم المناسب لطلبك بالضغط على الزر أدناه.\n\n"
+                    "• **شكوى**: للإبلاغ عن مشكلة.\n"
+                    "• **تقديم على رتبة المنظمين**: للانضمام لفريق العمل.\n"
+                    "• **استفسار & اقتراح**: لأي استفسارات أو أفكار.\n"
+                    "• **VIP**: مخصص لأعضاء الـ VIP (إدارة فقط).\n"
+                    "• **شكوى على إداري**: مراجعة الإدارة العليا.\n"
+                    "• **بوست لورد**: خاص بداعمين السيرفر.\n\n"
+                    "> *Farm of Legends* 🎬",
+        color=discord.Color.dark_embed()
+    )
+
+    view = MainTicketView()
+    target_channel = bot.get_channel(SETUP_CHANNEL_ID) or ctx.channel
+    await target_channel.send(embed=embed, view=view)
+    await ctx.reply("✅ تم نشر لوحة التيكتات بنجاح!", delete_after=5)
+
+TOKEN = os.getenv("DISCORD_TOKEN")
+if TOKEN:
+    bot.run(TOKEN)
+else:
+    print("❌ خطأ: يجيب وضع توكن البوت في متغيرات البيئة DISCORD_TOKEN.")
